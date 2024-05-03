@@ -1,0 +1,70 @@
+name: Create a PR
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Git
+        run: |
+          git config --global user.name "Someone"
+          git config --global user.email "someone@somewhere.com"
+          
+      - name: Run Js
+        id: run-first-js
+        run: 
+          output=$(node scripts/js/firstJs.js)
+          echo "isSuccess = ${{ steps.run-first-js.outputs.isSuccess}}"
+
+      - name: Ensure 'main' Branch Exists and is Up-to-Date
+        id: get-main
+        if: steps.run-first-js.outputs.isSuccess == 'true'
+        run: |
+          git fetch origin main
+
+      - name: create new branch
+        id: create-branch
+        if: steps.get-main.outcome == 'success'
+        run: |
+          datetime=$(date +"%Y%m%d%H%M%S")
+          branch_name="feature/updated-files-$datetime"
+          git checkout -b $branch_name main
+          echo "Branch '$branch_name' create successfuly"
+
+      - name: Get new changes
+        if: ${{ steps.create-branch.outcome == 'success'}}
+        id: new-changes
+        run: 
+          node scripts/js/secondJs.js
+          
+      - name: commit changes
+        id: commit-changes
+        if: steps.new-changes.outcome == 'success'
+        run: |
+          git add .
+          git commit -m "Commit from action"
+          echo "Changes committed successfully"
+
+      - name: Push branch to origin
+        id: push-changes
+        if: steps.commit-changes.outcome == 'success'
+        run: git push --set-upstream origin ${{ github.ref }} --force
+
+      - name: Create Pull Request
+        if: steps.push-changes.outcome == 'success'
+        uses: peter-evans/create-pull-request@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "File Updated"
+          title: "Update File"
+          branch: ${{ github.ref }}
+          base: main
+          body: |
+            This file modified then context of newday.txt file.
